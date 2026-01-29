@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '../services/db';
+import { MOCK_LINKS } from '../services/mockData';
 import { JournalPost, Circular, OrgEvent, SearchResult, ArchiveStat, QuickLinkCategory } from '../types';
-import { Pin, Calendar, FileText, Download, ExternalLink, ChevronRight, ArrowRight, Plus, Trash2, Filter, Search as SearchIcon, MapPin, Clock, Paperclip, Archive, Tag, X, Edit, Settings } from 'lucide-react';
+import { Pin, Calendar, FileText, Download, ExternalLink, ChevronRight, ArrowRight, Plus, Trash2, Filter, Search as SearchIcon, MapPin, Clock, Paperclip, Archive, Tag, X, Edit, Settings, LayoutGrid, Shield } from 'lucide-react';
 import PostModal from './PostModal';
 import LinkManagerModal from './LinkManagerModal';
 
@@ -17,7 +18,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
   const [events, setEvents] = useState<OrgEvent[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [archiveStats, setArchiveStats] = useState<ArchiveStat[]>([]);
-  const [quickLinkCategories, setQuickLinkCategories] = useState<QuickLinkCategory[]>([]);
+  // Initialize with MOCK_LINKS to ensure sidebar is never empty on first load
+  const [quickLinkCategories, setQuickLinkCategories] = useState<QuickLinkCategory[]>(MOCK_LINKS);
   
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'All' | 'Circulars' | 'OMs' | 'Events' | 'News'>('All');
@@ -40,19 +42,26 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
         const fetchCircs = activeTab === 'All' || activeTab === 'Circulars' || activeTab === 'OMs';
         const fetchEvents = activeTab === 'All' || activeTab === 'Events';
 
-        const [posts, circs, evts, archives, linkCats] = await Promise.all([
-          fetchPosts ? db.getJournalPosts(selectedCategory || undefined, selectedYear || undefined) : Promise.resolve([]),
-          fetchCircs ? db.getCirculars(selectedCategory || undefined, selectedYear || undefined) : Promise.resolve([]),
-          fetchEvents ? db.getOrgEvents() : Promise.resolve([]),
-          db.getArchiveYears(),
-          db.getQuickLinkCategories()
-        ]);
-        
-        setJournalPosts(posts);
-        setCirculars(circs);
-        setEvents(evts);
-        setArchiveStats(archives);
-        setQuickLinkCategories(linkCats);
+        try {
+          const [posts, circs, evts, archives, linkCats] = await Promise.all([
+            fetchPosts ? db.getJournalPosts(selectedCategory || undefined, selectedYear || undefined) : Promise.resolve([]),
+            fetchCircs ? db.getCirculars(selectedCategory || undefined, selectedYear || undefined) : Promise.resolve([]),
+            fetchEvents ? db.getOrgEvents() : Promise.resolve([]),
+            db.getArchiveYears(),
+            db.getQuickLinkCategories()
+          ]);
+          
+          setJournalPosts(posts);
+          setCirculars(circs);
+          setEvents(evts);
+          setArchiveStats(archives);
+          // Only override mock links if we actually get data from DB
+          if (linkCats && linkCats.length > 0) {
+            setQuickLinkCategories(linkCats);
+          }
+        } catch (e) {
+          console.error("Error fetching dashboard data", e);
+        }
     }
     setLoading(false);
   };
@@ -102,7 +111,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
 
   // Unified Feed Logic
   const feedItems = useMemo(() => {
-    if (loading) return [];
+    if (loading && journalPosts.length === 0) return [];
     
     // Transform and tag items
     const posts = journalPosts.map(p => ({ ...p, contentType: 'journal' as const, sortDate: p.publishedAt }));
@@ -192,6 +201,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
                     </button>
                 ))}
             </div>
+            {/* Quick Actions in Navbar - Optional but good for redundancy */}
             {userRole === 'admin' && (
                 <div className="flex space-x-2 pl-4 border-l border-slate-200">
                      <button onClick={() => openModal('journal')} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Add Post">
@@ -230,7 +240,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
 
         {/* Content Stream */}
         <div className="space-y-4">
-            {loading && <div className="text-center py-10 text-slate-400">Loading content...</div>}
+            {loading && journalPosts.length === 0 && <div className="text-center py-10 text-slate-400">Loading content...</div>}
             
             {!loading && feedItems.length === 0 && (
                 <div className="text-center py-16 bg-white rounded-xl border border-dashed border-slate-300">
@@ -238,7 +248,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
                 </div>
             )}
             
-            {!loading && feedItems.map((item: any) => {
+            {feedItems.map((item: any) => {
               // JOURNAL POST RENDER
               if (item.contentType === 'journal') {
                 const isExpanded = expandedPostId === item.id;
@@ -356,22 +366,53 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
       {/* ================= RIGHT COLUMN (30%) - Widgets ================= */}
       <div className="space-y-6">
 
-         {/* Admin Link Management Trigger */}
+         {/* Admin Actions Widget (Sidebar) */}
          {userRole === 'admin' && (
-             <button 
-                onClick={() => setIsLinkManagerOpen(true)}
-                className="w-full flex items-center justify-center py-2 px-4 bg-slate-800 text-white rounded-xl shadow-sm hover:bg-slate-900 transition-colors text-sm font-semibold"
-             >
-                 <Settings className="w-4 h-4 mr-2" />
-                 Manage Sidebar Widgets
-             </button>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center">
+                        <Shield className="w-4 h-4 mr-2 text-purple-600" />
+                        Admin Actions
+                    </h3>
+                </div>
+                <div className="p-3 space-y-2">
+                    <button 
+                        onClick={() => openModal('journal')}
+                        className="w-full flex items-center p-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors group"
+                    >
+                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center mr-3 group-hover:border-blue-200 group-hover:text-blue-600">
+                            <Plus className="w-4 h-4" />
+                        </div>
+                        Add Journal Post
+                    </button>
+                    <button 
+                        onClick={() => openModal('circular')}
+                        className="w-full flex items-center p-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-green-50 hover:text-green-700 rounded-lg transition-colors group"
+                    >
+                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center mr-3 group-hover:border-green-200 group-hover:text-green-600">
+                            <FileText className="w-4 h-4" />
+                        </div>
+                        Add Circular / OM
+                    </button>
+                    <button 
+                        onClick={() => setIsLinkManagerOpen(true)}
+                        className="w-full flex items-center p-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors group"
+                    >
+                        <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center mr-3 group-hover:border-slate-300">
+                            <Settings className="w-4 h-4" />
+                        </div>
+                        Manage Sidebar
+                    </button>
+                </div>
+            </div>
          )}
 
         {/* Dynamic Quick Links Widgets */}
         {quickLinkCategories.map((category) => (
           <div key={category.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative group">
             <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center">
+                <LayoutGrid className="w-4 h-4 mr-2 text-slate-400" />
                 {category.name}
               </h3>
               {userRole === 'admin' && (
@@ -406,34 +447,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
             </div>
           </div>
         ))}
-
-        {/* Archives Widget */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-             <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center">
-                <Archive className="w-4 h-4 mr-2" />
-                Archives
-              </h3>
-            </div>
-            <div className="p-3">
-                <div className="flex flex-wrap gap-2">
-                    {archiveStats.map(stat => (
-                        <button
-                            key={stat.year}
-                            onClick={() => setSelectedYear(selectedYear === stat.year ? null : stat.year)}
-                            className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                                selectedYear === stat.year 
-                                ? 'bg-blue-600 text-white border-blue-600' 
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'
-                            }`}
-                        >
-                            {stat.year} <span className="opacity-70 ml-1">({stat.count})</span>
-                        </button>
-                    ))}
-                    {archiveStats.length === 0 && <span className="text-xs text-slate-400 p-2">No archives available</span>}
-                </div>
-            </div>
-        </div>
 
         {/* Holiday Widget */}
         <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-6 text-white relative overflow-hidden">
@@ -472,13 +485,81 @@ const Home: React.FC<HomeProps> = ({ onNavigate, userRole, searchQuery }) => {
              </button>
         </div>
 
-        {/* Support Widget */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-             <h3 className="font-bold text-slate-800 mb-2">Helpdesk Support</h3>
-             <p className="text-sm text-slate-500 mb-4">Facing issues with email or network?</p>
-             <button className="w-full border border-slate-300 text-slate-700 font-medium py-2 rounded-lg hover:bg-slate-50 text-sm transition-colors">
-                 Raise Ticket
-             </button>
+        {/* Events Widget - As per wireframe */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Upcoming Events
+                </h3>
+            </div>
+            <div className="divide-y divide-slate-50">
+                {events.slice(0, 3).map(evt => (
+                    <div key={evt.id} className="p-3 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-start">
+                            <div className="flex-shrink-0 w-10 text-center bg-blue-50 rounded p-1 mr-3 border border-blue-100">
+                                <span className="block text-xs font-bold text-blue-700 uppercase">{new Date(evt.date).toLocaleString('default', { month: 'short' })}</span>
+                                <span className="block text-lg font-bold text-slate-900 leading-none">{new Date(evt.date).getDate()}</span>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-medium text-slate-900 line-clamp-1">{evt.title}</h4>
+                                <p className="text-xs text-slate-500 mt-0.5 flex items-center">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    {new Date(evt.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {events.length === 0 && <p className="text-xs text-slate-400 p-4 text-center">No upcoming events</p>}
+            </div>
+            <button onClick={() => onNavigate('calendar')} className="w-full text-center py-2 text-xs font-medium text-blue-600 bg-slate-50 hover:bg-slate-100 border-t border-slate-100">
+                View All Events
+            </button>
+        </div>
+
+        {/* Archives Widget */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+             <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center">
+                <Archive className="w-4 h-4 mr-2" />
+                Archives
+              </h3>
+            </div>
+            <div className="p-3">
+                <div className="flex flex-wrap gap-2">
+                    {archiveStats.map(stat => (
+                        <button
+                            key={stat.year}
+                            onClick={() => setSelectedYear(selectedYear === stat.year ? null : stat.year)}
+                            className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                                selectedYear === stat.year 
+                                ? 'bg-blue-600 text-white border-blue-600' 
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'
+                            }`}
+                        >
+                            {stat.year} <span className="opacity-70 ml-1">({stat.count})</span>
+                        </button>
+                    ))}
+                    {archiveStats.length === 0 && <span className="text-xs text-slate-400 p-2">No archives available</span>}
+                </div>
+            </div>
+        </div>
+
+        {/* Social Links Widget - As per wireframe footer note */}
+        <div className="bg-slate-800 text-white rounded-xl shadow-sm p-4 text-center">
+             <h3 className="text-xs font-bold uppercase tracking-wider mb-3 opacity-70">Follow CSIR-SERC</h3>
+             <div className="flex justify-center space-x-4">
+                 <a href="#" className="p-2 bg-slate-700 rounded-full hover:bg-blue-600 transition-colors" title="Twitter">
+                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>
+                 </a>
+                 <a href="#" className="p-2 bg-slate-700 rounded-full hover:bg-blue-800 transition-colors" title="Facebook">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+                 </a>
+                 <a href="#" className="p-2 bg-slate-700 rounded-full hover:bg-red-600 transition-colors" title="YouTube">
+                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>
+                 </a>
+             </div>
         </div>
 
       </div>
