@@ -1,0 +1,5 @@
+{
+  "name": "CSIR-SERC Intranet",
+  "description": "A secure, employees-only intranet portal featuring circulars, journals, gallery, and holiday calendar with AD integration simulation.",
+  "requestFramePermissions": []
+}
